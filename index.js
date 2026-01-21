@@ -1,6 +1,8 @@
 const express = require("express");
 const app = express();
 
+const pool = require("./db");
+
 app.get("/", (req, res) => {
   res.json({ status: "Backend running" });
 });
@@ -8,13 +10,6 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-const pool = require("./db");
 
 app.get("/db-test", async (req, res) => {
   try {
@@ -30,4 +25,9 @@ app.get("/db-test", async (req, res) => {
       error: err.message,
     });
   }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
