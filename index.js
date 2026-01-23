@@ -3,6 +3,10 @@ const app = express();
 
 const pool = require("./db");
 
+const jwt = require("jsonwebtoken");
+
+const bcrypt = require("bcrypt");
+
 app.get("/", (req, res) => {
   res.json({ status: "Backend running" });
 });
