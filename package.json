@@ -4,15 +4,26 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaungmyatmincs/monotel-backend.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kaungmyatmincs/monotel-backend/issues"
+  },
+  "homepage": "https://github.com/kaungmyatmincs/monotel-backend#readme",
   "dependencies": {
-    "express": "^5.2.1",
-    "pg": "^8.17.2"
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.3.1",
+    "express": "^4.22.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.18.0",
+    "uuid": "^13.0.0"
   }
 }
