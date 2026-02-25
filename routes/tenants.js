@@ -150,7 +150,7 @@ router.patch("/bills/:billId/mark-paid", auth, async (req, res) => {
 router.get("/:id/bills", auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, month, rent, water, electricity, amount AS total, status, paid_at
+      `SELECT id, month, rent, water, electricity, amount AS total, status, paid_at, elec_prev, elec_curr, water_prev, water_curr
        FROM bills
        WHERE tenant_id = $1
        ORDER BY month ASC`,
@@ -235,13 +235,16 @@ router.post("/:id/send-bill-telegram", auth, async (req, res) => {
     if (!bill) return res.status(404).json({ error: "No bill found for this month" });
 
     // Build message
+    const elecUnits = bill.elec_curr - bill.elec_prev;
+    const waterUnits = bill.water_curr - bill.water_prev;
+
     const message =
       `🏠 *Monotel - Bill for ${bill.month}*\n` +
       `👤 Tenant: ${tenant.name}\n` +
       `─────────────────\n` +
       `🛏 Rent:        ฿${bill.rent}\n` +
-      `💧 Water:       ฿${bill.water}\n` +
-      `⚡ Electricity: ฿${bill.electricity}\n` +
+      `💧 Water:       ฿${bill.water} (${waterUnits} units)\n` +
+      `⚡ Electricity: ฿${bill.electricity} (${elecUnits} units)\n` +
       `─────────────────\n` +
       `💰 *Total: ฿${bill.amount}*\n` +
       `📌 Status: ${bill.status}`;
