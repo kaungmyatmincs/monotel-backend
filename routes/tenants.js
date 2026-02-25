@@ -289,4 +289,60 @@ router.post("/:id/send-bill-telegram", auth, async (req, res) => {
   }
 });
 
+// CREATE bill from meter readings (manual input)
+router.post("/create-bill-from-meters", auth, async (req, res) => {
+  if (req.user.role !== "owner") {
+    return res.status(403).json({ error: "Only owner can create bills" });
+  }
+
+  const { room_number, month, elec_prev, elec_curr, water_prev, water_curr } = req.body;
+
+  if (!room_number || !month || elec_curr === undefined || elec_prev === undefined) {
+    return res.status(400).json({ error: "room_number, month, elec_prev, elec_curr required" });
+  }
+
+  try {
+    // Get room + rent
+    const roomResult = await pool.query(
+      `SELECT * FROM rooms WHERE room_number = $1`,
+      [room_number]
+    );
+    const room = roomResult.rows[0];
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    // Get tenant in that room
+    const tenantResult = await pool.query(
+      `SELECT * FROM tenants WHERE room_id = $1 AND is_active = true`,
+      [room.id]
+    );
+    const tenant = tenantResult.rows[0];
+    if (!tenant) return res.status(404).json({ error: "No active tenant in this room" });
+
+    // Calculate
+    const rent = Number(room.monthly_rent);
+    const elecUnits = Number(elec_curr) - Number(elec_prev);
+    const waterUnits = Number(water_curr || 0) - Number(water_prev || 0);
+    const electricity = elecUnits * 400;
+    const water = waterUnits * 15;
+    const total = rent + electricity + water;
+
+    // Create bill
+    const result = await pool.query(
+      `INSERT INTO bills
+       (id, tenant_id, month, rent, water, electricity, amount, status, elec_prev, elec_curr, water_prev, water_curr)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'unpaid',$8,$9,$10,$11)
+       RETURNING *`,
+      [uuidv4(), tenant.id, month, rent, water, electricity, total, elec_prev, elec_curr, water_prev || 0, water_curr || 0]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Bill already exists for this month" });
+    }
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;
