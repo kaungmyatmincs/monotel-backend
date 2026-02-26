@@ -25,6 +25,8 @@ const tenantsRoutes = require("./routes/tenants");
 
 const dashboardRoutes = require("./routes/dashboard");
 
+const telegramRoutes = require("./routes/telegram");
+
 app.get("/", (req, res) => {
   res.json({ status: "Backend running" });
 });
@@ -107,6 +109,8 @@ app.use("/rooms", roomsRoutes);
 app.use("/tenants", tenantsRoutes);
 
 app.use("/dashboard", dashboardRoutes);
+
+app.use("/telegram", telegramRoutes);
 
 console.log("ABOUT TO LISTEN");
 
