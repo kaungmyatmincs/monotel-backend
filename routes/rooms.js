@@ -55,11 +55,13 @@ router.put("/:id", auth, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `UPDATE rooms
-       SET room_number=$1, floor=$2, monthly_rent=$3, is_occupied=$4
-       WHERE id=$5
-       RETURNING *`,
-      [room_number, floor, monthly_rent, is_occupied, req.params.id]
+      `UPDATE rooms 
+      SET room_number = COALESCE($1, room_number),
+          floor = COALESCE($2, floor),
+          monthly_rent = COALESCE($3, monthly_rent),
+          is_occupied = COALESCE($4, is_occupied)
+      WHERE id=$5 RETURNING *`,
+      [room_number ?? null, floor ?? null, monthly_rent ?? null, is_occupied ?? null, req.params.id]
     );
 
     res.json(result.rows[0]);

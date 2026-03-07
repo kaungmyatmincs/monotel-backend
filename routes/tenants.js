@@ -15,6 +15,7 @@ router.get("/", auth, async (req, res) => {
       SELECT tenants.*, rooms.room_number
       FROM tenants
       LEFT JOIN rooms ON tenants.room_id = rooms.id
+      WHERE tenants.is_active = true
       ORDER BY tenants.name ASC
     `);
     res.json(result.rows);
@@ -27,6 +28,13 @@ router.get("/", auth, async (req, res) => {
 router.post("/", auth, async (req, res) => {
   if (req.user.role !== "owner") return res.status(403).json({ error: "Unauthorized" });
   const { name, phone, room_id } = req.body;
+  const existing = await pool.query(
+    `SELECT id FROM tenants WHERE room_id = $1 AND is_active = true`,
+    [room_id]
+  );
+  if (existing.rows.length > 0) {
+    return res.status(400).json({ error: "Room already has an active tenant" });
+  }
   try {
     const result = await pool.query(
       `INSERT INTO tenants (id, name, phone, room_id, is_active) VALUES ($1,$2,$3,$4,true) RETURNING *`,
@@ -57,7 +65,14 @@ router.patch("/:id", auth, async (req, res) => {
 router.delete("/:id", auth, async (req, res) => {
   if (req.user.role !== "owner") return res.status(403).json({ error: "Unauthorized" });
   try {
+    const tenant = await pool.query(`SELECT room_id FROM tenants WHERE id=$1`, [req.params.id]);
+    const roomId = tenant.rows[0]?.room_id;
+
     await pool.query(`UPDATE tenants SET is_active=false WHERE id=$1`, [req.params.id]);
+
+    if (roomId) {
+      await pool.query(`UPDATE rooms SET is_occupied=false WHERE id=$1`, [roomId]);
+    }
     res.json({ message: "Tenant deactivated" });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
