@@ -5,36 +5,43 @@ const auth = require("../middleware/auth");
 const puppeteer = require("puppeteer");
 
 function generateFormHTML(room, tenants, settings, dateRange) {
-  const { host_name, host_nrc, host_address, host_phone } = settings;
+  const { host_name, host_nrc, host_address, host_phone, ward_number, street_name } = settings;
   const { from_date, to_date, form_date } = dateRange;
 
-  const burmseNumbers = ["၁", "၂", "၃", "၄", "၅", "၆", "၇"];
+  const rowNumbers = ["(က)", "(ခ)", "(ဂ)", "(ဃ)", "(င)", "(စ)", "(ဆ)"];
 
   const tenantRows = Array.from({ length: 7 }, (_, i) => {
     const t = tenants[i];
     if (t) {
       return `
         <tr>
-          <td>${burmseNumbers[i]}</td>
-          <td style="text-align:left; padding-left:6px">${t.name || ""}</td>
-          <td>${t.date_of_birth ? t.date_of_birth.toISOString().slice(0, 10) : ""}</td>
+          <td>${rowNumbers[i]}</td>
+          <td style="text-align:left; padding-left:4px">${t.name || ""}</td>
+          <td>${t.date_of_birth ? new Date(t.date_of_birth).toISOString().slice(0, 10) : ""}</td>
           <td>${t.father_name || ""}</td>
-          <td>${t.mother_name || ""}</td>
           <td>${t.nrc_number || ""}</td>
-          <td style="text-align:left; padding-left:4px; font-size:8pt">${t.previous_address || ""}</td>
+          <td>${t.occupation || ""}</td>
+          <td>${t.relationship || ""}</td>
           <td>${t.ethnicity || ""}</td>
-          <td style="font-size:8pt">${t.occupation || ""}</td>
+          <td style="text-align:left; padding-left:4px">${t.previous_address || ""}</td>
+          <td>${t.visit_purpose || ""}</td>
           <td></td>
         </tr>`;
     } else {
       return `
         <tr>
-          <td>${burmseNumbers[i]}</td>
+          <td>${rowNumbers[i]}</td>
           <td></td><td></td><td></td><td></td>
-          <td></td><td></td><td></td><td></td><td></td>
+          <td></td><td></td><td></td><td></td><td></td><td></td>
         </tr>`;
     }
   }).join("");
+
+  // Pick ဦး or ဒေါ် based on host gender — default to ဦး/ဒေါ် if unknown
+  // For host we don't have gender in settings, so just show both for now
+  // but for future can add host_gender to settings
+  
+  const hostTitle = settings.host_gender === 'female' ? 'ဒေါ်' : 'ဦး';
 
   return `<!DOCTYPE html>
 <html lang="my">
@@ -42,74 +49,106 @@ function generateFormHTML(room, tenants, settings, dateRange) {
 <meta charset="UTF-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:serif; padding:15mm 18mm; font-size:10pt; }
-  .form-title { text-align:center; font-size:14pt; font-weight:700; margin-bottom:12px; line-height:1.5; }
-  .date-row { text-align:right; font-size:9.5pt; margin-bottom:8px; }
-  .address-row { font-size:9.5pt; margin-bottom:12px; line-height:1.8; }
-  .underline { display:inline-block; border-bottom:1px solid #000; min-width:50px; text-align:center; padding:0 4px; }
-  table { width:100%; border-collapse:collapse; font-size:8.5pt; margin-bottom:12px; }
-  th, td { border:1px solid #000; padding:4px 3px; text-align:center; vertical-align:middle; line-height:1.5; }
-  th { background:#f5f5f5; font-weight:700; font-size:8pt; }
-  td { height:26px; }
-  .footer-note { font-size:9pt; margin-bottom:14px; line-height:1.8; }
-  .sig-section { display:flex; justify-content:space-between; align-items:flex-start; margin-top:8px; }
-  .sig-left { font-size:9pt; line-height:2.2; width:55%; }
-  .sig-line { display:flex; align-items:baseline; gap:6px; }
-  .sig-line .line { flex:1; border-bottom:1px solid #000; min-width:100px; }
-  .sig-right { font-size:9pt; text-align:center; line-height:1.8; width:40%; }
-  .stamp-box { width:100px; height:70px; border:1px solid #000; margin:8px auto 0; }
+  body { font-family:serif; font-size:9pt; padding:8mm 10mm; }
+  .header { text-align:center; margin-bottom:5px; }
+  .header .line1 { font-size:12pt; font-weight:700; line-height:1.6; }
+  .header .line2 { font-size:11pt; font-weight:700; line-height:1.6; }
+  .info-line { text-align:center; margin-bottom:3px; white-space:nowrap; font-size:8pt; letter-spacing:-0.2px; }
+  .subline { text-align:center; margin-bottom:6px; }
+  .blank { display:inline-block; border-bottom:1px solid #000; text-align:center; padding:0 6px; }
+  table { width:100%; border-collapse:collapse; font-size:7pt; margin-bottom:6px; table-layout:fixed; }
+  th, td { border:1px solid #000; padding:2px; text-align:center; vertical-align:middle; line-height:1.3; overflow:hidden; word-break:break-all; }
+  th { font-weight:700; font-size:6.5pt; background:#f5f5f5; }
+  td { height:22px; }
+  .footer-note { font-size:9pt; line-height:1.8; margin-bottom:16px; text-align:center; }
+  .sig-row { display:flex; justify-content:space-between; align-items:flex-start; font-size:8pt; margin-top:16px; }
+  .sig-box { text-align:center; width:21%; }
+  .sig-box .sig-label { margin-bottom:2px; }
+  .sig-box .sig-line { border-bottom:1px solid #000; width:100%; margin-bottom:2px; height:16px; }
+  .sig-box .name-line { font-size:7.5pt; }
+  .sig-right { width:31%; font-size:8pt; line-height:2; }
+  .sig-right .right-line { display:flex; align-items:baseline; gap:4px; margin-bottom:3px; }
+  .sig-right .right-line .rl { border-bottom:1px solid #000; flex:1; height:14px; }
 </style>
 </head>
 <body>
 
-<div class="form-title">ညွှန်စာရင်းတိုင်ကြားခြင်း (Overnight Stay Registration Form)</div>
+<div class="header">
+  <div class="line1">လှိုင်သာယာ (အရှေ့ပိုင်း) မြို့နယ်၊ အမှတ် (၆) ရပ်ကွက်၊ ရပ်ကွက်အုပ်ချုပ်ရေးမှူးရုံး</div>
+  <div class="line2">ရပ်ကွက် / ကျေးရွာအတွင်း နေထိုင်စဥ် ဧည့်စာရင်းတိုင်ကြားမှုမှတ်တမ်း</div>
+</div>
 
-<div class="date-row">နေ့စွဲ: <span class="underline">${form_date}</span></div>
+<div class="info-line">
+  <span class="blank" style="min-width:35px; padding:0 6px">${ward_number || ""}</span> ရပ်ကွက်၊
+  <span class="blank" style="min-width:60px; padding:0 6px">${street_name || ""}</span> လမ်း၊
+  အိမ်အမှတ်/ အဆောင် <span class="blank" style="min-width:35px; padding:0 6px">${room.room_number}</span>
+  အိမ်ရှင်/ အဆောင် ${settings.host_gender === 'female' ? '<s>ဦး</s>/ ဒေါ်' : 'ဦး/ <s>ဒေါ်</s>'} <span class="blank" style="min-width:110px">${host_name || ""}</span> ၏
+</div>
 
-<div class="address-row">
-  တည်းခိုနေရပ်လိပ်စာ၊ အိမ်တိုက် (<span class="underline">${room.room_number}</span>) အခန်း/အလွာ (<span class="underline">${room.floor || ""}</span>) ၊
-  &nbsp;&nbsp; လမ်း/အိမ်ယာ၊ အမှတ် (<span class="underline">&nbsp;&nbsp;&nbsp;</span>) ရပ်ကွက်၊ လှိုင်သာယာမြို့နယ်။
+<div class="subline">
+  နေအိမ်/၏ အောက်အမည်ပါသူများမှ အဆောင်တွင် ခေတ္တ/ အမြဲ လာရောက်နေထိုင်ပါသဖြင့် ဧည့်စာရင်းတိုင်ကြားအပ်ပါသည်။
 </div>
 
 <table>
+  <colgroup>
+    <col style="width:26px">
+    <col style="width:82px">
+    <col style="width:52px">
+    <col style="width:65px">
+    <col style="width:76px">
+    <col style="width:50px">
+    <col style="width:50px">
+    <col style="width:52px">
+    <col style="width:95px">
+    <col style="width:72px">
+    <col style="width:45px">
+  </colgroup>
   <thead>
     <tr>
-      <th style="width:28px">စဉ်</th>
-      <th style="width:80px">အမည်</th>
-      <th style="width:62px">မွေးသက္ကရာဇ်</th>
-      <th style="width:70px">အဘ အမည်</th>
-      <th style="width:70px">အမိ အမည်</th>
-      <th style="width:82px">နိုင်ငံသားစိစစ်ရေးအမှတ်</th>
-      <th style="width:80px">ယခင်နေရပ်လိပ်စာ</th>
-      <th style="width:40px">လူမျိုး</th>
-      <th style="width:55px">အလုပ်အကိုင်</th>
-      <th style="width:50px">မှတ်ချက်</th>
+      <th>စဉ်</th>
+      <th>ဧည့်သည်အမည်</th>
+      <th>မွေးသက္ကရာဇ်</th>
+      <th>အဘအမည်</th>
+      <th>မှတ်ပုံတင်အမှတ်</th>
+      <th>အလုပ်အကိုင်</th>
+      <th>တော်စပ်ပုံ</th>
+      <th>မွေးဇာတိ (အပြည့်အစုံ)</th>
+      <th>ယခင်နေထိုင်ခဲ့သည့်နေရာများ (နေရပ်လိပ်စာအပြည့်အစုံ)</th>
+      <th>လာရောက်သည့်အကြောင်းအရာ</th>
+      <th>မှတ်ချက်</th>
     </tr>
   </thead>
   <tbody>${tenantRows}</tbody>
 </table>
 
 <div class="footer-note">
-  အထက်ပါဧည့်စာရင်းတိုင်ကြားသူ (<span class="underline">&nbsp;${tenants.length}&nbsp;</span>) ဦးအား
-  (<span class="underline">&nbsp;${from_date}&nbsp;</span>) ရက်နေ့မှ
-  (<span class="underline">&nbsp;${to_date}&nbsp;</span>) ရက်နေ့အထိ သာ ဧည့်စာရင်းခွင့်ပြုသည်။
+  မှတ်ချက်။ ဧည့်စာရင်းလာရောက်တိုင်ကြားရာတွင် လာရောက်တည်းခိုနေထိုင်သည့် ဧည့်သည်နောက်ဆုံးနေခဲ့သည့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါရှိရမည်။<br>
+  ဧည့်စာရင်းလာရောက်တိုင်သည့်နေ့နှင့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါ ရက်စွဲများသည် ရက်အလွန်ကွာဝေးခြင်းမျိုးမဖြစ်စေရ။
 </div>
 
-<div class="sig-section">
-  <div class="sig-left">
-    <div class="sig-line"><span>အိမ်ရှင်အမည် (Host Name):</span><span class="line">&nbsp;${host_name}</span></div>
-    <div style="height:6px"></div>
-    <div class="sig-line"><span>နိုင်ငံသားစိစစ်ရေးအမှတ် (NRC No.):</span><span class="line">&nbsp;${host_nrc}</span></div>
-    <div style="height:6px"></div>
-    <div class="sig-line"><span>အိမ်ရှင်နေရပ်လိပ်စာ (Host Address):</span><span class="line">&nbsp;${host_address}</span></div>
-    <div style="height:6px"></div>
-    <div class="sig-line"><span>ဆက်သွယ်ရန်ဖုန်း (Contact Phone):</span><span class="line">&nbsp;${host_phone}</span></div>
+<div class="sig-row">
+  <div class="sig-box">
+    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-line"></div>
+    <div class="name-line">---- ဆယ်အိမ်မှူး ----</div>
+    <div class="name-line">အမည် -------------------------</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-line"></div>
+    <div class="name-line">---- ရာအိမ်မှူး ----</div>
+    <div class="name-line">အမည် -------------------------</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-line"></div>
+    <div class="name-line">ရပ်ကွက်/ ကျေးရွာအုပ်ချုပ်ရေးမှူး</div>
+    <div class="name-line">အမည် -------------------------</div>
   </div>
   <div class="sig-right">
-    <div>ရပ်ကွက်အုပ်ချုပ်ရေးမှူး</div>
-    <div>အမှတ် (၆) ရပ်ကွက်၊</div>
-    <div>လှိုင်သာယာမြို့နယ်။</div>
-    <div class="stamp-box"></div>
+    <div class="right-line"><span>တာဝန်ယူတိုင်ကြားသူ</span><span class="rl"></span></div>
+    <div class="right-line"><span>အိမ်ရှင်/အဆောင်ပိုင်ရှင်အမည်</span><span class="rl"></span></div>
+    <div class="right-line"><span>ဆက်သွယ်ရန်ဖုန်းနံပါတ်ပါ</span><span class="rl"></span></div>
   </div>
 </div>
 
@@ -118,7 +157,7 @@ function generateFormHTML(room, tenants, settings, dateRange) {
 }
 
 // GET /print/overnight-form?rooms=uuid1,uuid2
-router.get("/overnight-form", auth, async (req, res) => {
+router.get("/overnight-form", async (req, res) => {
   try {
     const { rooms, from_date, to_date, form_date } = req.query;
 
@@ -127,7 +166,7 @@ router.get("/overnight-form", auth, async (req, res) => {
     const roomIds = rooms.split(",").map(r => r.trim());
 
     // Get settings
-    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone')`);
+    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone','ward_number','street_name','host_gender')`);
     const settings = {};
     settingsRes.rows.forEach(r => settings[r.key] = r.value);
 
@@ -161,18 +200,18 @@ router.get("/overnight-form", auth, async (req, res) => {
     });
     const page = await browser.newPage();
     await page.setContent(allPagesHTML, { waitUntil: "domcontentloaded" });
-    await new Promise(r => setTimeout(r, 2000));;
+    await new Promise(r => setTimeout(r, 2000));
     const pdf = await page.pdf({
       format: "A4",
+      landscape: true,
       printBackground: true,
-      margin: { top: "10mm", bottom: "10mm", left: "0mm", right: "0mm" }
+      margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
     });
-    console.log("PDF size:", pdf.length, "bytes"); // add this
     await browser.close();
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", "attachment; filename=overnight_form.pdf");
-    res.end(pdf, 'binary');
+    res.end(pdf, "binary");
 
   } catch (err) {
     console.error(err);
