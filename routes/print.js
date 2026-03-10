@@ -4,18 +4,21 @@ const pool = require("../db");
 const auth = require("../middleware/auth");
 const puppeteer = require("puppeteer");
 
-function generateFormHTML(room, tenants, settings, dateRange) {
+function generateFormHTML(room, tenants, settings, dateRange, lang = 'my') {
+  const isEn = lang === 'en';
   const { host_name, host_nrc, host_address, host_phone, ward_number, street_name } = settings;
   const { from_date, to_date, form_date } = dateRange;
 
   const rowNumbers = ["(က)", "(ခ)", "(ဂ)", "(ဃ)", "(င)", "(စ)", "(ဆ)"];
+  const rowNumbersEn = ["(1)", "(2)", "(3)", "(4)", "(5)", "(6)", "(7)"];
 
   const tenantRows = Array.from({ length: 7 }, (_, i) => {
     const t = tenants[i];
+    const num = isEn ? rowNumbersEn[i] : rowNumbers[i];
     if (t) {
       return `
         <tr>
-          <td>${rowNumbers[i]}</td>
+          <td>${num}</td>
           <td style="text-align:left; padding-left:4px">${t.name || ""}</td>
           <td>${t.date_of_birth ? new Date(t.date_of_birth).toISOString().slice(0, 10) : ""}</td>
           <td>${t.father_name || ""}</td>
@@ -30,21 +33,18 @@ function generateFormHTML(room, tenants, settings, dateRange) {
     } else {
       return `
         <tr>
-          <td>${rowNumbers[i]}</td>
+          <td>${num}</td>
           <td></td><td></td><td></td><td></td>
           <td></td><td></td><td></td><td></td><td></td><td></td>
         </tr>`;
     }
   }).join("");
 
-  // Pick ဦး or ဒေါ် based on host gender — default to ဦး/ဒေါ် if unknown
-  // For host we don't have gender in settings, so just show both for now
-  // but for future can add host_gender to settings
-  
   const hostTitle = settings.host_gender === 'female' ? 'ဒေါ်' : 'ဦး';
+  const hostStrike = settings.host_gender === 'female' ? '<s>ဦး</s>/ ဒေါ်' : 'ဦး/ <s>ဒေါ်</s>';
 
   return `<!DOCTYPE html>
-<html lang="my">
+<html lang="${isEn ? 'en' : 'my'}">
 <head>
 <meta charset="UTF-8">
 <style>
@@ -74,19 +74,25 @@ function generateFormHTML(room, tenants, settings, dateRange) {
 <body>
 
 <div class="header">
-  <div class="line1">လှိုင်သာယာ (အရှေ့ပိုင်း) မြို့နယ်၊ အမှတ် (၆) ရပ်ကွက်၊ ရပ်ကွက်အုပ်ချုပ်ရေးမှူးရုံး</div>
-  <div class="line2">ရပ်ကွက် / ကျေးရွာအတွင်း နေထိုင်စဥ် ဧည့်စာရင်းတိုင်ကြားမှုမှတ်တမ်း</div>
+  <div class="line1">${isEn
+    ? 'Hlaing Thar Yar (East) Township, Ward No. (6), Ward Administration Office'
+    : 'လှိုင်သာယာ (အရှေ့ပိုင်း) မြို့နယ်၊ အမှတ် (၆) ရပ်ကွက်၊ ရပ်ကွက်အုပ်ချုပ်ရေးမှူးရုံး'}</div>
+  <div class="line2">${isEn
+    ? 'Guest Registration Record for Residents Staying in Ward / Village'
+    : 'ရပ်ကွက် / ကျေးရွာအတွင်း နေထိုင်စဥ် ဧည့်စာရင်းတိုင်ကြားမှုမှတ်တမ်း'}</div>
 </div>
 
 <div class="info-line">
-  <span class="blank" style="min-width:35px; padding:0 6px">${ward_number || ""}</span> ရပ်ကွက်၊
-  <span class="blank" style="min-width:60px; padding:0 6px">${street_name || ""}</span> လမ်း၊
-  အိမ်အမှတ်/ အဆောင် <span class="blank" style="min-width:35px; padding:0 6px">${room.room_number}</span>
-  အိမ်ရှင်/ အဆောင် ${settings.host_gender === 'female' ? '<s>ဦး</s>/ ဒေါ်' : 'ဦး/ <s>ဒေါ်</s>'} <span class="blank" style="min-width:110px">${host_name || ""}</span> ၏
+  <span class="blank" style="min-width:35px; padding:0 6px">${ward_number || ""}</span> ${isEn ? 'Ward,' : 'ရပ်ကွက်၊'}
+  <span class="blank" style="min-width:60px; padding:0 6px">${street_name || ""}</span> ${isEn ? 'Street,' : 'လမ်း၊'}
+  ${isEn ? 'House No. / Building' : 'အိမ်အမှတ်/ အဆောင်'} <span class="blank" style="min-width:35px; padding:0 6px">${room.room_number}</span>
+  ${isEn ? 'Host / Building Owner' : 'အိမ်ရှင်/ အဆောင်'} ${isEn ? '' : hostStrike} <span class="blank" style="min-width:110px">${host_name || ""}</span> ${isEn ? '' : '၏'}
 </div>
 
 <div class="subline">
-  နေအိမ်/၏ အောက်အမည်ပါသူများမှ အဆောင်တွင် ခေတ္တ/ အမြဲ လာရောက်နေထိုင်ပါသဖြင့် ဧည့်စာရင်းတိုင်ကြားအပ်ပါသည်။
+  ${isEn
+    ? 'The persons listed below have come to stay temporarily / permanently at the above residence and are hereby registered as guests.'
+    : 'နေအိမ်/၏ အောက်အမည်ပါသူများမှ အဆောင်တွင် ခေတ္တ/ အမြဲ လာရောက်နေထိုင်ပါသဖြင့် ဧည့်စာရင်းတိုင်ကြားအပ်ပါသည်။'}
 </div>
 
 <table>
@@ -105,50 +111,51 @@ function generateFormHTML(room, tenants, settings, dateRange) {
   </colgroup>
   <thead>
     <tr>
-      <th>စဉ်</th>
-      <th>ဧည့်သည်အမည်</th>
-      <th>မွေးသက္ကရာဇ်</th>
-      <th>အဘအမည်</th>
-      <th>မှတ်ပုံတင်အမှတ်</th>
-      <th>အလုပ်အကိုင်</th>
-      <th>တော်စပ်ပုံ</th>
-      <th>မွေးဇာတိ (အပြည့်အစုံ)</th>
-      <th>ယခင်နေထိုင်ခဲ့သည့်နေရာများ (နေရပ်လိပ်စာအပြည့်အစုံ)</th>
-      <th>လာရောက်သည့်အကြောင်းအရာ</th>
-      <th>မှတ်ချက်</th>
+      <th>${isEn ? 'No.' : 'စဉ်'}</th>
+      <th>${isEn ? 'Guest Name' : 'ဧည့်သည်အမည်'}</th>
+      <th>${isEn ? 'Date of Birth' : 'မွေးသက္ကရာဇ်'}</th>
+      <th>${isEn ? "Father's Name" : 'အဘအမည်'}</th>
+      <th>${isEn ? 'NRC Number' : 'မှတ်ပုံတင်အမှတ်'}</th>
+      <th>${isEn ? 'Occupation' : 'အလုပ်အကိုင်'}</th>
+      <th>${isEn ? 'Relationship' : 'တော်စပ်ပုံ'}</th>
+      <th>${isEn ? 'Ethnicity' : 'မွေးဇာတိ (အပြည့်အစုံ)'}</th>
+      <th>${isEn ? 'Previous Address (Full)' : 'ယခင်နေထိုင်ခဲ့သည့်နေရာများ (နေရပ်လိပ်စာအပြည့်အစုံ)'}</th>
+      <th>${isEn ? 'Purpose of Visit' : 'လာရောက်သည့်အကြောင်းအရာ'}</th>
+      <th>${isEn ? 'Remark' : 'မှတ်ချက်'}</th>
     </tr>
   </thead>
   <tbody>${tenantRows}</tbody>
 </table>
 
 <div class="footer-note">
-  မှတ်ချက်။ ဧည့်စာရင်းလာရောက်တိုင်ကြားရာတွင် လာရောက်တည်းခိုနေထိုင်သည့် ဧည့်သည်နောက်ဆုံးနေခဲ့သည့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါရှိရမည်။<br>
-  ဧည့်စာရင်းလာရောက်တိုင်သည့်နေ့နှင့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါ ရက်စွဲများသည် ရက်အလွန်ကွာဝေးခြင်းမျိုးမဖြစ်စေရ။
+  ${isEn
+    ? 'Note: When registering guests, the guest must provide a letter of support from the last police station and ward where they resided. The dates on the support letters must not be too far from the registration date.'
+    : 'မှတ်ချက်။ ဧည့်စာရင်းလာရောက်တိုင်ကြားရာတွင် လာရောက်တည်းခိုနေထိုင်သည့် ဧည့်သည်နောက်ဆုံးနေခဲ့သည့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါရှိရမည်။<br>ဧည့်စာရင်းလာရောက်တိုင်သည့်နေ့နှင့် ရဲစခန်းနှင့် ရပ်ကွက်ထောက်ခံစာများပါ ရက်စွဲများသည် ရက်အလွန်ကွာဝေးခြင်းမျိုးမဖြစ်စေရ။'}
 </div>
 
 <div class="sig-row">
   <div class="sig-box">
-    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-label">${isEn ? '(Signature)' : '(လက်မှတ်)'}</div>
     <div class="sig-line"></div>
-    <div class="name-line">---- ဆယ်အိမ်မှူး ----</div>
-    <div class="name-line">အမည် -------------------------</div>
+    <div class="name-line">${isEn ? '---- 10-House Leader ----' : '---- ဆယ်အိမ်မှူး ----'}</div>
+    <div class="name-line">${isEn ? 'Name -------------------------' : 'အမည် -------------------------'}</div>
   </div>
   <div class="sig-box">
-    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-label">${isEn ? '(Signature)' : '(လက်မှတ်)'}</div>
     <div class="sig-line"></div>
-    <div class="name-line">---- ရာအိမ်မှူး ----</div>
-    <div class="name-line">အမည် -------------------------</div>
+    <div class="name-line">${isEn ? '---- 100-House Leader ----' : '---- ရာအိမ်မှူး ----'}</div>
+    <div class="name-line">${isEn ? 'Name -------------------------' : 'အမည် -------------------------'}</div>
   </div>
   <div class="sig-box">
-    <div class="sig-label">(လက်မှတ်)</div>
+    <div class="sig-label">${isEn ? '(Signature)' : '(လက်မှတ်)'}</div>
     <div class="sig-line"></div>
-    <div class="name-line">ရပ်ကွက်/ ကျေးရွာအုပ်ချုပ်ရေးမှူး</div>
-    <div class="name-line">အမည် -------------------------</div>
+    <div class="name-line">${isEn ? 'Ward / Village Administrator' : 'ရပ်ကွက်/ ကျေးရွာအုပ်ချုပ်ရေးမှူး'}</div>
+    <div class="name-line">${isEn ? 'Name -------------------------' : 'အမည် -------------------------'}</div>
   </div>
   <div class="sig-right">
-    <div class="right-line"><span>တာဝန်ယူတိုင်ကြားသူ</span><span class="rl"></span></div>
-    <div class="right-line"><span>အိမ်ရှင်/အဆောင်ပိုင်ရှင်အမည်</span><span class="rl"></span></div>
-    <div class="right-line"><span>ဆက်သွယ်ရန်ဖုန်းနံပါတ်ပါ</span><span class="rl"></span></div>
+    <div class="right-line"><span>${isEn ? 'Responsible Reporter' : 'တာဝန်ယူတိုင်ကြားသူ'}</span><span class="rl"></span></div>
+    <div class="right-line"><span>${isEn ? 'Host / Building Owner Name' : 'အိမ်ရှင်/အဆောင်ပိုင်ရှင်အမည်'}</span><span class="rl"></span></div>
+    <div class="right-line"><span>${isEn ? 'Contact Phone Number' : 'ဆက်သွယ်ရန်ဖုန်းနံပါတ်ပါ'}</span><span class="rl"></span></div>
   </div>
 </div>
 
@@ -156,16 +163,15 @@ function generateFormHTML(room, tenants, settings, dateRange) {
 </html>`;
 }
 
-// GET /print/overnight-form?rooms=uuid1,uuid2
-router.get("/overnight-form", async (req, res) => {
+// GET /print/overnight-form?rooms=uuid1,uuid2&lang=en
+router.get("/overnight-form", auth, async (req, res) => {
   try {
-    const { rooms, from_date, to_date, form_date } = req.query;
+    const { rooms, from_date, to_date, form_date, lang } = req.query;
 
     if (!rooms) return res.status(400).json({ error: "No rooms specified" });
 
     const roomIds = rooms.split(",").map(r => r.trim());
 
-    // Get settings
     const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone','ward_number','street_name','host_gender')`);
     const settings = {};
     settingsRes.rows.forEach(r => settings[r.key] = r.value);
@@ -177,7 +183,6 @@ router.get("/overnight-form", async (req, res) => {
       to_date: to_date || today,
     };
 
-    // Generate one HTML page per room
     let allPagesHTML = "";
     for (const roomId of roomIds) {
       const roomRes = await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
@@ -190,10 +195,10 @@ router.get("/overnight-form", async (req, res) => {
       );
       const tenants = tenantsRes.rows;
 
-      allPagesHTML += generateFormHTML(room, tenants, settings, dateRange);
+      if (allPagesHTML !== "") allPagesHTML += '<div style="page-break-after: always;"></div>';
+      allPagesHTML += generateFormHTML(room, tenants, settings, dateRange, lang || 'my');
     }
 
-    // Launch Puppeteer and generate PDF
     const browser = await puppeteer.launch({
       headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"]

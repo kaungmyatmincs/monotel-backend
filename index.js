@@ -29,6 +29,8 @@ const telegramRoutes = require("./routes/telegram");
 
 const printRoutes = require("./routes/print");
 
+const settingsRoutes = require("./routes/settings");
+
 app.get("/", (req, res) => {
   res.json({ status: "Backend running" });
 });
@@ -115,6 +117,8 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/telegram", telegramRoutes);
 
 app.use("/print", printRoutes);
+
+app.use("/settings", settingsRoutes);
 
 console.log("ABOUT TO LISTEN");
 
