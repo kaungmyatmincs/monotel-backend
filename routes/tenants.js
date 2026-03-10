@@ -72,7 +72,8 @@ router.patch("/:id", auth, async (req, res) => {
   const {
     name, phone, room_id, telegram_chat_id,
     date_of_birth, father_name, mother_name,
-    nrc_number, previous_address, ethnicity, occupation
+    nrc_number, previous_address, ethnicity, occupation,
+    relationship, visit_purpose, gender
   } = req.body;
 
   try {
@@ -88,13 +89,17 @@ router.patch("/:id", auth, async (req, res) => {
         nrc_number = COALESCE($8, nrc_number),
         previous_address = COALESCE($9, previous_address),
         ethnicity = COALESCE($10, ethnicity),
-        occupation = COALESCE($11, occupation)
-       WHERE id = $12
+        occupation = COALESCE($11, occupation),
+        relationship = COALESCE($12, relationship),
+        visit_purpose = COALESCE($13, visit_purpose),
+        gender = COALESCE($14, gender)
+       WHERE id = $15
        RETURNING *`,
-      [name, phone, room_id, telegram_chat_id, date_of_birth, father_name, mother_name, nrc_number, previous_address, ethnicity, occupation, req.params.id]
+      [name, phone, room_id, telegram_chat_id, date_of_birth, father_name, mother_name, nrc_number, previous_address, ethnicity, occupation, relationship, visit_purpose, gender, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
