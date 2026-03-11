@@ -3,6 +3,10 @@ const router = express.Router();
 const pool = require("../db");
 const auth = require("../middleware/auth");
 const puppeteer = require("puppeteer");
+const fs = require("fs");
+const path = require("path");
+
+// ── Overnight Form ────────────────────────────────────────────────────────────
 
 function generateFormHTML(room, tenants, settings, dateRange, lang = 'my') {
   const isEn = lang === 'en';
@@ -163,6 +167,241 @@ function generateFormHTML(room, tenants, settings, dateRange, lang = 'my') {
 </html>`;
 }
 
+// ── Receipt ───────────────────────────────────────────────────────────────────
+
+// Load logo once at startup as base64
+const LOGO_PATH = path.join(__dirname, "../assets/logo.png");
+let LOGO_BASE64 = "";
+try {
+  LOGO_BASE64 = `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString("base64")}`;
+} catch (e) {
+  console.warn("Logo not found at", LOGO_PATH, "— receipt will render without logo");
+}
+
+function toBurmeseNumber(n) {
+  const digits = ["၀","၁","၂","၃","၄","၅","၆","၇","၈","၉"];
+  return String(Math.round(n)).replace(/\d/g, d => digits[d]);
+}
+
+function formatAmount(n, lang) {
+  const formatted = Math.round(n).toLocaleString("en-US");
+  if (lang === "en") return formatted;
+  return formatted.replace(/\d/g, d => ["၀","၁","၂","၃","၄","၅","၆","၇","၈","၉"][d]);
+}
+
+function generateReceiptHTML(bill, tenant, room, lang = "my") {
+  const isEn = lang === "en";
+
+  const elecUnits = bill.elec_curr - bill.elec_prev;
+  const waterUnits = bill.water_curr - bill.water_prev;
+
+  // Build table rows
+  let rows = "";
+  let itemNum = 1;
+
+  // Row: Room charge
+  rows += receiptRow(itemNum++, isEn ? "Room Charge" : "အခန်းခ", 1, bill.rent, "", lang);
+
+  // Row: Electricity (only if units > 0)
+  if (elecUnits > 0) {
+    const label = isEn
+      ? `Electricity (${elecUnits} units)`
+      : `လျှပ်စစ်မီတာခ (${toBurmeseNumber(elecUnits)} ယူနစ်)`;
+    rows += receiptRow(itemNum++, label, bill.elec_rate, bill.electricity, "", lang);
+  }
+
+  // Row: Water (only if units > 0)
+  if (waterUnits > 0) {
+    const label = isEn
+      ? `Water (${waterUnits} units)`
+      : `ရေမီတာခ (${toBurmeseNumber(waterUnits)} ယူနစ်)`;
+    rows += receiptRow(itemNum++, label, bill.water_rate, bill.water, "", lang);
+  }
+
+  // Extra charges
+  const extras = Array.isArray(bill.extra_charges) ? bill.extra_charges : JSON.parse(bill.extra_charges || "[]");
+  for (const charge of extras) {
+    rows += receiptRow(itemNum++, charge.label, 1, charge.amount, charge.remark || "", lang);
+  }
+
+  // Fill remaining rows up to 7 total
+  while (itemNum <= 7) {
+    rows += `<tr><td></td><td></td><td></td><td></td><td></td></tr>`;
+    itemNum++;
+  }
+
+  const total = formatAmount(bill.amount, lang);
+
+  // Format date
+  const dateObj = new Date();
+  const dateStr = isEn
+    ? dateObj.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    : toBurmeseDate(dateObj);
+
+  return `<!DOCTYPE html>
+<html lang="${isEn ? "en" : "my"}">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: serif;
+    background-color: #a8cfc0;
+    padding: 28px 32px 28px 32px;
+    width: 720px;
+  }
+  .receipt { background-color: #a8cfc0; }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .header-left h1 {
+    font-size: 20pt;
+    font-weight: 700;
+    font-family: Arial, sans-serif;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .field-row {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 11pt;
+  }
+  .field-label { min-width: 115px; }
+  .field-value {
+    border-bottom: 1.5px solid #000;
+    min-width: 160px;
+    padding: 0 4px 1px 4px;
+  }
+  .header-right img {
+    width: 85px;
+    height: 85px;
+    object-fit: contain;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5pt;
+  }
+  thead tr { background-color: #2d6b5e; color: white; }
+  thead th { padding: 9px 8px; font-weight: 600; }
+  th:nth-child(1) { width: 70px; text-align: center; }
+  th:nth-child(2) { text-align: left; }
+  th:nth-child(3) { width: 80px; text-align: right; }
+  th:nth-child(4) { width: 100px; text-align: right; }
+  th:nth-child(5) { width: 80px; text-align: center; }
+  tbody tr { border-bottom: 1px solid #7aafa0; }
+  tbody td {
+    padding: 8px 8px;
+    background-color: #a8cfc0;
+    height: 34px;
+  }
+  td:nth-child(1) { text-align: center; text-decoration: underline; }
+  td:nth-child(2) { text-align: left; }
+  td:nth-child(3) { text-align: right; }
+  td:nth-child(4) { text-align: right; text-decoration: underline; }
+  td:nth-child(5) { text-align: center; }
+  .footer {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .footer-left { font-size: 11pt; display: flex; align-items: baseline; gap: 6px; }
+  .total-value {
+    font-size: 13pt;
+    font-weight: 700;
+    border-bottom: 1.5px solid #000;
+    min-width: 130px;
+    padding-left: 4px;
+  }
+  .footer-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 22px;
+    font-size: 11pt;
+  }
+  .sig-line {
+    border-bottom: 1.5px solid #000;
+    width: 180px;
+  }
+</style>
+</head>
+<body>
+<div class="receipt">
+  <div class="header">
+    <div class="header-left">
+      <h1>KAUNG SWANN HOSTEL</h1>
+      <div class="field-row">
+        <span class="field-label">${isEn ? "Room No. -" : "အခန်းနံပါတ် -"}</span>
+        <span class="field-value">&nbsp;${room.room_number}</span>
+      </div>
+      <div class="field-row">
+        <span class="field-label">${isEn ? "Date -" : "ရက်စွဲ -"}</span>
+        <span class="field-value">&nbsp;${dateStr}</span>
+      </div>
+    </div>
+    <div class="header-right">
+      ${LOGO_BASE64 ? `<img src="${LOGO_BASE64}" alt="logo">` : ""}
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>${isEn ? "Item No." : "အမှတ်စဉ်"}</th>
+        <th>${isEn ? "Description" : "အကြောင်းအရာ"}</th>
+        <th>${isEn ? "Rate" : "နှုန်း"}</th>
+        <th>${isEn ? "Sub Total" : "ငွေပမာဏ"}</th>
+        <th>${isEn ? "Remark" : "မှတ်ချက်"}</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="footer">
+    <div class="footer-left">
+      <span>${isEn ? "Total Amount in Words -" : "စုစုပေါင်းငွေ (စာဖြင့်) -"}</span>
+      <span class="total-value">&nbsp;${total}</span>
+    </div>
+    <div class="footer-right">
+      <span>${isEn ? "Bill Collector Signature" : "ငွေကောက်ခံသူ လက်မှတ်"}</span>
+      <div class="sig-line"></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+function receiptRow(num, label, rate, amount, remark, lang) {
+  const isEn = lang === "en";
+  const numStr = isEn ? String(num) : ["၁","၂","၃","၄","၅","၆","၇"][num - 1];
+  const rateStr = isEn ? (rate === 1 ? "1" : Number(rate).toLocaleString()) : (rate === 1 ? "၁" : formatAmount(rate, lang));
+  return `<tr>
+    <td>${numStr}</td>
+    <td>${label}</td>
+    <td>${rateStr}</td>
+    <td>${formatAmount(amount, lang)}</td>
+    <td>${remark}</td>
+  </tr>`;
+}
+
+function toBurmeseDate(date) {
+  const months = ["ဇန်နဝါရီ","ဖေဖော်ဝါရီ","မတ်","ဧပြီ","မေ","ဇွန်","ဇူလိုင်","သြဂုတ်","စက်တင်ဘာ","အောက်တိုဘာ","နိုဝင်ဘာ","ဒီဇင်ဘာ"];
+  const digits = ["၀","၁","၂","၃","၄","၅","၆","၇","၈","၉"];
+  const d = String(date.getDate()).replace(/\d/g, n => digits[n]);
+  const m = months[date.getMonth()];
+  const y = String(date.getFullYear()).replace(/\d/g, n => digits[n]);
+  return `${d} ${m} ${y}`;
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
 // GET /print/overnight-form?rooms=uuid1,uuid2&lang=en
 router.get("/overnight-form", auth, async (req, res) => {
   try {
@@ -172,7 +411,9 @@ router.get("/overnight-form", auth, async (req, res) => {
 
     const roomIds = rooms.split(",").map(r => r.trim());
 
-    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone','ward_number','street_name','host_gender')`);
+    const settingsRes = await pool.query(
+      `SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone','ward_number','street_name','host_gender')`
+    );
     const settings = {};
     settingsRes.rows.forEach(r => settings[r.key] = r.value);
 
@@ -196,12 +437,12 @@ router.get("/overnight-form", auth, async (req, res) => {
       const tenants = tenantsRes.rows;
 
       if (allPagesHTML !== "") allPagesHTML += '<div style="page-break-after: always;"></div>';
-      allPagesHTML += generateFormHTML(room, tenants, settings, dateRange, lang || 'my');
+      allPagesHTML += generateFormHTML(room, tenants, settings, dateRange, lang || "my");
     }
 
     const browser = await puppeteer.launch({
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
     await page.setContent(allPagesHTML, { waitUntil: "domcontentloaded" });
@@ -210,14 +451,59 @@ router.get("/overnight-form", auth, async (req, res) => {
       format: "A4",
       landscape: true,
       printBackground: true,
-      margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" }
+      margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" },
     });
     await browser.close();
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", "attachment; filename=overnight_form.pdf");
     res.end(pdf, "binary");
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error", detail: err.message });
+  }
+});
 
+// GET /print/receipt/:billId?lang=my
+router.get("/receipt/:billId", auth, async (req, res) => {
+  try {
+    const { billId } = req.params;
+    const lang = req.query.lang || "my";
+
+    const billRes = await pool.query(
+      `SELECT b.*, t.name as tenant_name, t.room_id, t.telegram_chat_id,
+              r.room_number, r.monthly_rent
+       FROM bills b
+       JOIN tenants t ON b.tenant_id = t.id
+       JOIN rooms r ON t.room_id = r.id
+       WHERE b.id = $1`,
+      [billId]
+    );
+    if (billRes.rows.length === 0) return res.status(404).json({ error: "Bill not found" });
+
+    const bill = billRes.rows[0];
+    const tenant = { name: bill.tenant_name, room_id: bill.room_id };
+    const room = { room_number: bill.room_number, monthly_rent: bill.monthly_rent };
+
+    const html = generateReceiptHTML(bill, tenant, room, lang);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+    await new Promise(r => setTimeout(r, 1500));
+    const pdf = await page.pdf({
+      width: "720px",
+      printBackground: true,
+      margin: { top: "0", bottom: "0", left: "0", right: "0" },
+    });
+    await browser.close();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=receipt_${bill.month}.pdf`);
+    res.end(pdf, "binary");
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error", detail: err.message });
