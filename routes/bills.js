@@ -10,8 +10,8 @@ router.get("/room/:roomId", auth, async (req, res) => {
     const result = await pool.query(
       `SELECT b.*, t.name as tenant_name
        FROM bills b
-       JOIN tenants t ON b.tenant_id = t.id
-       WHERE t.room_id = $1
+       LEFT JOIN tenants t ON b.tenant_id = t.id
+       WHERE b.room_id = $1
        ORDER BY b.created_at DESC`,
       [roomId]
     );
@@ -27,11 +27,11 @@ router.get("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT b.*, t.name as tenant_name, t.room_id,
+      `SELECT b.*, t.name as tenant_name,
               r.room_number, r.monthly_rent
        FROM bills b
-       JOIN tenants t ON b.tenant_id = t.id
-       JOIN rooms r ON t.room_id = r.id
+       LEFT JOIN tenants t ON b.tenant_id = t.id
+       JOIN rooms r ON b.room_id = r.id
        WHERE b.id = $1`,
       [id]
     );
@@ -51,25 +51,27 @@ router.post("/", auth, async (req, res) => {
   try {
     const {
       tenant_id,
+      room_id,
       month,
-      elec_prev,
-      elec_curr,
-      elec_rate,
-      water_prev,
-      water_curr,
-      water_rate,
+      elec_prev, elec_curr, elec_rate,
+      water_prev, water_curr, water_rate,
       extra_charges = [],
     } = req.body;
 
-    // Get room rent
-    const tenantRes = await pool.query(
-      `SELECT t.*, r.monthly_rent FROM tenants t JOIN rooms r ON t.room_id = r.id WHERE t.id = $1`,
-      [tenant_id]
+    // Get rent from room directly
+    const roomRes = await pool.query(
+      `SELECT * FROM rooms WHERE id = $1`, [room_id]
     );
-    if (tenantRes.rows.length === 0) return res.status(404).json({ error: "Tenant not found" });
-    const tenant = tenantRes.rows[0];
+    if (roomRes.rows.length === 0) return res.status(404).json({ error: "Room not found" });
+    const room = roomRes.rows[0];
 
-    const rent = parseFloat(tenant.monthly_rent) || 0;
+    // Get tenant for telegram
+    const tenantRes = await pool.query(
+      `SELECT * FROM tenants WHERE room_id = $1 AND is_active = true LIMIT 1`, [room_id]
+    );
+    const tenant = tenantRes.rows[0] || null;
+
+    const rent = parseFloat(room.monthly_rent) || 0;
     const electricity = (elec_curr - elec_prev) * elec_rate;
     const water = (water_curr - water_prev) * water_rate;
     const extraTotal = extra_charges.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
@@ -78,30 +80,29 @@ router.post("/", auth, async (req, res) => {
     const id = require("crypto").randomUUID();
     const result = await pool.query(
       `INSERT INTO bills
-        (id, tenant_id, month, rent, electricity, water,
+        (id, tenant_id, room_id, month, rent, electricity, water,
          elec_prev, elec_curr, elec_rate,
          water_prev, water_curr, water_rate,
          extra_charges, amount, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'unpaid')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'unpaid')
        RETURNING *`,
       [
-        id, tenant_id, month, rent, electricity, water,
+        id, tenant?.id || null, room_id, month, rent, electricity, water,
         elec_prev, elec_curr, elec_rate,
         water_prev, water_curr, water_rate,
         JSON.stringify(extra_charges), amount,
       ]
     );
 
-    // Send Telegram if tenant has chat_id
-    if (tenant.telegram_chat_id) {
+    if (tenant?.telegram_chat_id) {
       await sendTelegramBill(tenant, result.rows[0], rent, electricity, water, extra_charges, amount);
     }
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    if (err.constraint === "unique_tenant_month") {
-      return res.status(409).json({ error: "Bill for this tenant and month already exists" });
+    if (err.constraint === "unique_room_month") {
+      return res.status(409).json({ error: "Bill for this room and month already exists" });
     }
     res.status(500).json({ error: err.message });
   }
