@@ -1,5 +1,12 @@
 console.log("STARTING APP");
 
+const { execSync } = require('child_process');
+try {
+  execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
+} catch (e) {
+  console.log('Puppeteer install failed:', e.message);
+}
+
 require("dotenv").config();
 
 const cors = require("cors");
