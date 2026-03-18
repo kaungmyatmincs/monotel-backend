@@ -1,17 +1,5 @@
 console.log("STARTING APP");
-const { execSync } = require('child_process');
-try {
-  execSync('yum install -y nss atk at-spi2-atk cups-libs libdrm libXcomposite libXdamage libXrandr mesa-libgbm alsa-lib', { stdio: 'inherit' });
-  console.log('System deps installed');
-} catch (e) {
-  console.log('yum failed:', e.message);
-}
-try {
-  execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
-  console.log('Chrome installed');
-} catch (e) {
-  console.log('Chrome install failed:', e.message);
-}
+
 require("dotenv").config();
 
 const cors = require("cors");
