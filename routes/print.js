@@ -52,8 +52,9 @@
   <head>
   <meta charset="UTF-8">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap');
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:serif; font-size:9pt; padding:8mm 10mm; }
+    body { font-family: 'Noto Sans Myanmar', serif; font-size:9pt; padding:8mm 10mm; }
     .header { text-align:center; margin-bottom:5px; }
     .header .line1 { font-size:12pt; font-weight:700; line-height:1.6; }
     .header .line2 { font-size:11pt; font-weight:700; line-height:1.6; }
@@ -243,9 +244,10 @@
   <head>
   <meta charset="UTF-8">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap');
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: serif;
+      font-family: 'Noto Sans Myanmar', serif;
       background-color: #a8cfc0;
       padding: 28px 32px 28px 32px;
       width: 720px;
@@ -455,7 +457,8 @@
       // Connect to browser
       browser = await getBrowser();
       const page = await browser.newPage();
-      await page.setContent(allPagesHTML, { waitUntil: "domcontentloaded" });
+      
+      await page.setContent(allPagesHTML, { waitUntil: "networkidle0" });
       
       // Ensure Burmese fonts are loaded
       await page.evaluateHandle('document.fonts.ready');
