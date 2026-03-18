@@ -458,7 +458,7 @@
       browser = await getBrowser();
       const page = await browser.newPage();
       
-      await page.setContent(allPagesHTML, { waitUntil: "networkidle0" });
+      await page.setContent(allPagesHTML, { waitUntil: "networkidle0", timeout: 60000 });
       
       // Ensure Burmese fonts are loaded
       await page.evaluateHandle('document.fonts.ready');
@@ -505,7 +505,7 @@
 
       browser = await getBrowser();
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "domcontentloaded" });
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 60000 });
       
       const pdf = await page.pdf({
         width: "720px",
