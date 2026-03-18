@@ -505,7 +505,7 @@
 
       browser = await getBrowser();
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: 60000 });
+      await page.setContent(allPagesHTML, { waitUntil: "load", timeout: 1200000 });
       
       const pdf = await page.pdf({
         width: "720px",
