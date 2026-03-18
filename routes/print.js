@@ -447,7 +447,7 @@
         if (!room) continue;
 
         const tenantsRes = await pool.query(
-          `SELECT * FROM tenants WHERE room_id = $1 AND is_active = true ORDER BY name ASC`,
+          `SELECT * FROM tenants WHERE room_id = $1 AND is_active = true ORDER BY created_at ASC`,
           [roomId]
         );
         if (allPagesHTML !== "") allPagesHTML += '<div style="page-break-after: always;"></div>';
