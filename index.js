@@ -2,9 +2,10 @@ console.log("STARTING APP");
 
 const { execSync } = require('child_process');
 try {
-  execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
+  execSync('apt-get update -y && apt-get install -y libnspr4 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2', { stdio: 'inherit' });
+  console.log('System deps installed');
 } catch (e) {
-  console.log('Puppeteer install failed:', e.message);
+  console.log('apt-get failed:', e.message);
 }
 
 require("dotenv").config();
