@@ -108,14 +108,21 @@ app.get("/protected", auth, (req, res) => {
   });
 });
 
-app.use("/api/buildings", buildingsRoutes);
-app.use("/api/rooms", roomsRoutes);
-app.use("/api/tenants", tenantsRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/telegram", telegramRoutes);
-app.use("/api/print", printRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/bills", billRoutes);
+app.use("/buildings", buildingsRoutes);
+
+app.use("/rooms", roomsRoutes);
+
+app.use("/tenants", tenantsRoutes);
+
+app.use("/dashboard", dashboardRoutes);
+
+app.use("/telegram", telegramRoutes);
+
+app.use("/print", printRoutes);
+
+app.use("/settings", settingsRoutes);
+
+app.use("/bills", billRoutes);
 
 console.log("ABOUT TO LISTEN");
 
