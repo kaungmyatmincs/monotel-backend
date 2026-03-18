@@ -1,13 +1,17 @@
 console.log("STARTING APP");
-
 const { execSync } = require('child_process');
 try {
-  execSync('apt-get update -y && apt-get install -y libnspr4 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2', { stdio: 'inherit' });
+  execSync('yum install -y nss atk at-spi2-atk cups-libs libdrm libXcomposite libXdamage libXrandr mesa-libgbm alsa-lib', { stdio: 'inherit' });
   console.log('System deps installed');
 } catch (e) {
-  console.log('apt-get failed:', e.message);
+  console.log('yum failed:', e.message);
 }
-
+try {
+  execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
+  console.log('Chrome installed');
+} catch (e) {
+  console.log('Chrome install failed:', e.message);
+}
 require("dotenv").config();
 
 const cors = require("cors");
