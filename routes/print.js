@@ -401,16 +401,30 @@
   }
 
   // ── Routes ────────────────────────────────────────────────────────────────────
-
-  // GET /print/overnight-form?rooms=uuid1,uuid2&lang=en
+  // Helper to launch or connect to browser
+  async function getBrowser() {
+    const token = process.env.BROWSERLESS_TOKEN;
+    if (token) {
+      // Connect to Browserless (AWS fix)
+      return await puppeteer.connect({
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${token}`,
+      });
+    } else {
+      // Fallback for local development
+      return await puppeteer.launch({
+        headless: "new",
+        args: ["--no-sandbox", "--disable-setuid-sandbox"]
+      });
+    }
+  }
+  // GET /print/overnight-form
   router.get("/overnight-form", auth, async (req, res) => {
+    let browser;
     try {
       const { rooms, from_date, to_date, form_date, lang } = req.query;
-
       if (!rooms) return res.status(400).json({ error: "No rooms specified" });
 
       const roomIds = rooms.split(",").map(r => r.trim());
-
       const settingsRes = await pool.query(
         `SELECT key, value FROM settings WHERE key IN ('host_name','host_nrc','host_address','host_phone','ward_number','street_name','host_gender')`
       );
@@ -434,52 +448,47 @@
           `SELECT * FROM tenants WHERE room_id = $1 AND is_active = true ORDER BY name ASC`,
           [roomId]
         );
-        const tenants = tenantsRes.rows;
-
         if (allPagesHTML !== "") allPagesHTML += '<div style="page-break-after: always;"></div>';
-        allPagesHTML += generateFormHTML(room, tenants, settings, dateRange, lang || "my");
+        allPagesHTML += generateFormHTML(room, tenantsRes.rows, settings, dateRange, lang || "my");
       }
 
-      const browser = await puppeteer.launch({
-        headless: "new",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-zygote",
-          "--single-process",
-        ],
-      });
+      // Connect to browser
+      browser = await getBrowser();
       const page = await browser.newPage();
       await page.setContent(allPagesHTML, { waitUntil: "domcontentloaded" });
-      await new Promise(r => setTimeout(r, 2000));
+      
+      // Ensure Burmese fonts are loaded
+      await page.evaluateHandle('document.fonts.ready');
+
       const pdf = await page.pdf({
         format: "A4",
         landscape: true,
         printBackground: true,
         margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" },
       });
-      await browser.close();
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", "attachment; filename=overnight_form.pdf");
       res.end(pdf, "binary");
     } catch (err) {
-      console.error(err);
+      console.error("PDF Error:", err);
       res.status(500).json({ error: "Server error", detail: err.message });
+    } finally {
+      // Use disconnect for Browserless, close for Local
+      if (browser) {
+        process.env.BROWSERLESS_TOKEN ? await browser.disconnect() : await browser.close();
+      }
     }
   });
 
-  // GET /print/receipt/:billId?lang=my
+  // GET /print/receipt/:billId
   router.get("/receipt/:billId", auth, async (req, res) => {
+    let browser;
     try {
       const { billId } = req.params;
       const lang = req.query.lang || "my";
 
       const billRes = await pool.query(
-        `SELECT b.*, t.name as tenant_name, t.room_id, t.telegram_chat_id,
-                r.room_number, r.monthly_rent
+        `SELECT b.*, t.name as tenant_name, t.room_id, r.room_number, r.monthly_rent
         FROM bills b
         JOIN tenants t ON b.tenant_id = t.id
         JOIN rooms r ON t.room_id = r.id
@@ -489,38 +498,27 @@
       if (billRes.rows.length === 0) return res.status(404).json({ error: "Bill not found" });
 
       const bill = billRes.rows[0];
-      const tenant = { name: bill.tenant_name, room_id: bill.room_id };
-      const room = { room_number: bill.room_number, monthly_rent: bill.monthly_rent };
+      const html = generateReceiptHTML(bill, { name: bill.tenant_name }, { room_number: bill.room_number }, lang);
 
-      const html = generateReceiptHTML(bill, tenant, room, lang);
-
-      const browser = await puppeteer.launch({
-        headless: "new",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-zygote",
-          "--single-process",
-        ],
-      });
+      browser = await getBrowser();
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: "domcontentloaded" });
-      await new Promise(r => setTimeout(r, 1500));
+      
       const pdf = await page.pdf({
         width: "720px",
         printBackground: true,
         margin: { top: "0", bottom: "0", left: "0", right: "0" },
       });
-      await browser.close();
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=receipt_${bill.month}.pdf`);
       res.end(pdf, "binary");
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Server error", detail: err.message });
+      console.error("Receipt Error:", err);
+      res.status(500).json({ error: "Server error" });
+    } finally {
+      if (browser) {
+        process.env.BROWSERLESS_TOKEN ? await browser.disconnect() : await browser.close();
+      }
     }
   });
 
