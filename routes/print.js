@@ -458,7 +458,7 @@
       browser = await getBrowser();
       const page = await browser.newPage();
       
-      await page.setContent(allPagesHTML, { waitUntil: "networkidle0", timeout: 60000 });
+      await page.setContent(allPagesHTML, { waitUntil: "load", timeout: 1200000 });
       
       // Ensure Burmese fonts are loaded
       await page.evaluateHandle('document.fonts.ready');
