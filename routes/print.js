@@ -491,16 +491,17 @@
       const lang = req.query.lang || "my";
 
       const billRes = await pool.query(
-        `SELECT b.*, r.room_number, r.monthly_rent
+        `SELECT b.*, t.name as tenant_name, t.room_id, r.room_number, r.monthly_rent
         FROM bills b
-        JOIN rooms r ON b.room_id = r.id
+        JOIN tenants t ON b.tenant_id = t.id
+        JOIN rooms r ON t.room_id = r.id
         WHERE b.id = $1`,
         [billId]
       );
-            if (billRes.rows.length === 0) return res.status(404).json({ error: "Bill not found" });
+      if (billRes.rows.length === 0) return res.status(404).json({ error: "Bill not found" });
 
       const bill = billRes.rows[0];
-      const html = generateReceiptHTML(bill, { name: '' }, { room_number: bill.room_number }, lang);
+      const html = generateReceiptHTML(bill, { name: bill.tenant_name }, { room_number: bill.room_number }, lang);
 
       browser = await getBrowser();
       const page = await browser.newPage();
